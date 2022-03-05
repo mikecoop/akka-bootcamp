@@ -1,6 +1,7 @@
 namespace WinTail
 
 open System
+open System.IO
 open Akka.Actor
 open Akka.FSharp
 open WinTail.Messages
@@ -15,9 +16,7 @@ module Actors =
     let consoleReaderActor (validation: IActorRef) (mailbox: Actor<_>) message =
         // Print instructions to the console
         let doPrintInstructions () =
-            Console.WriteLine "Write whatever you want into the console!"
-            Console.WriteLine "Some entries will pass validation, and some won't...\n\n"
-            Console.WriteLine "Type 'exit' to quit this application at any time.\n"
+            Console.WriteLine "Please provide the URI of a log file on disk.\n"
 
         let (|Message|Exit|) (str: string) =
             match str.ToLower() with
@@ -39,20 +38,57 @@ module Actors =
 
         getAndValidateInput ()
 
-    let validationActor (consoleWriter: IActorRef) (mailbox: Actor<_>) message =
-        // Active pattern matching to determine the characteristics of the message (empty, even length, or odd length).
-        let (|EmptyMessage|MessageLengthIsEven|MessageLengthIsOdd|) (msg: string) =
-            match msg.Length, msg.Length % 2 with
-            | 0, _ -> EmptyMessage
-            | _, 0 -> MessageLengthIsEven
-            | _, _ -> MessageLengthIsOdd
+    let tailActor (filePath: string) (reporter: IActorRef) (mailbox: Actor<_>) =
+        // Monitor the file for changes
+        let observer = new FileObserver (mailbox.Self, Path.GetFullPath (filePath))
+        do observer.Start()
+        // Read the initial contents of the file
+        let fileStream = new FileStream (Path.GetFullPath filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)
+        let fileStreamReader = new StreamReader (fileStream, Text.Encoding.UTF8)
+        let text = fileStreamReader.ReadToEnd ()
+        do mailbox.Self <! InitialRead (filePath, text)
+
+        let rec loop() = actor {
+            let! message = mailbox.Receive ()
+            match (box message) :?> FileCommand with
+            | FileWrite(_) ->
+                let text = fileStreamReader.ReadToEnd()
+                if not <| String.IsNullOrWhiteSpace text
+                then reporter <! text
+                else ()
+            | FileError (_, reason) -> reporter <! $"Tail error: {reason}"
+            | InitialRead (_, text) -> reporter <! text
+            return! loop()
+        }
+        loop()
+
+    let tailCoordinatorActor (mailbox: Actor<_>) message =
+        match message with
+        | StartTail (filePath, reporter) ->
+            spawn mailbox.Context "tailActor" (tailActor filePath reporter) |> ignore
+        | _ -> ()
+
+    let fileValidatorActor (consoleWriter: IActorRef) (tailCoordinator: IActorRef) (mailbox: Actor<_>) message =
+        let (|IsFileUri|_|) path =
+            if File.Exists path
+            then Some path
+            else None
+
+        let (|EmptyMessage|Message|) (msg: string) =
+            match msg.Length with
+            | 0 -> EmptyMessage
+            | _ -> Message(msg)
 
         match message with
-        | EmptyMessage -> consoleWriter <! InputError ("No input received.", ErrorType.Null)
-        | MessageLengthIsEven -> consoleWriter <! InputSuccess ("Thank you! The message was valid.")
-        | _ -> consoleWriter <! InputError ("The message is invalid (odd number of characters)!", ErrorType.Validation)
-
-        mailbox.Sender() <! Continue
+        | EmptyMessage ->
+            consoleWriter <! InputError ("Input was blank. Please try again.\n", ErrorType.Null)
+            mailbox.Sender () <! Continue
+        | IsFileUri _ ->
+            consoleWriter <! InputSuccess ($"Start processing for {message}")
+            tailCoordinator <! StartTail (message, consoleWriter)
+        | _ ->
+            consoleWriter <! InputError ($"{message} is not an existing URI on disk.", ErrorType.Validation)
+            mailbox.Sender () <! Continue
 
     let consoleWriterActor message =
         let printInColor color message =
