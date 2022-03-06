@@ -20,9 +20,9 @@ let main argv =
 
     let tailCoordinatorActor = spawnOpt myActorSystem "tailCoordinatorActor" (actorOf2 Actors.tailCoordinatorActor) [ SpawnOption.SupervisorStrategy (strategy ()) ]
 
-    let fileValidatorActor = spawn myActorSystem "validatorActor" (actorOf2 (Actors.fileValidatorActor consoleWriterActor tailCoordinatorActor))
+    let fileValidatorActor = spawn myActorSystem "validatorActor" (actorOf2 (Actors.fileValidatorActor consoleWriterActor))
 
-    let consoleReaderActor = spawn myActorSystem "consoleReaderActor" (actorOf2 (Actors.consoleReaderActor fileValidatorActor))
+    let consoleReaderActor = spawn myActorSystem "consoleReaderActor" (actorOf2 Actors.consoleReaderActor)
 
     // tell the consoleReader actor to begin
     consoleReaderActor <! Start

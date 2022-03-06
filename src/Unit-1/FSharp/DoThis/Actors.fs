@@ -13,7 +13,7 @@ module Actors =
         | Message of string
         | Exit
 
-    let consoleReaderActor (validation: IActorRef) (mailbox: Actor<_>) message =
+    let consoleReaderActor (mailbox: Actor<_>) message =
         // Print instructions to the console
         let doPrintInstructions () =
             Console.WriteLine "Please provide the URI of a log file on disk.\n"
@@ -27,7 +27,7 @@ module Actors =
             let line = Console.ReadLine()
             match line with
             | Exit -> mailbox.Context.System.Terminate () |> ignore
-            | _ -> validation <! line
+            | _ -> select "/user/validationActor" mailbox.Context.System <! line
 
         match box message with
         | :? Command as command ->
@@ -68,7 +68,7 @@ module Actors =
             spawn mailbox.Context "tailActor" (tailActor filePath reporter) |> ignore
         | _ -> ()
 
-    let fileValidatorActor (consoleWriter: IActorRef) (tailCoordinator: IActorRef) (mailbox: Actor<_>) message =
+    let fileValidatorActor (consoleWriter: IActorRef) (mailbox: Actor<_>) message =
         let (|IsFileUri|_|) path =
             if File.Exists path
             then Some path
@@ -85,7 +85,7 @@ module Actors =
             mailbox.Sender () <! Continue
         | IsFileUri _ ->
             consoleWriter <! InputSuccess ($"Start processing for {message}")
-            tailCoordinator <! StartTail (message, consoleWriter)
+            select "/user/tailCoordinatorActor" mailbox.Context.System <! StartTail (message, consoleWriter)
         | _ ->
             consoleWriter <! InputError ($"{message} is not an existing URI on disk.", ErrorType.Validation)
             mailbox.Sender () <! Continue
