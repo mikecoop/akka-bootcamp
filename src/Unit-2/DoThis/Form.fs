@@ -1,6 +1,10 @@
 ﻿namespace ChartApp
 
+open System.IO
+open System.Linq
+open System.Xml.Linq
 open Akka.Actor
+open Akka.Configuration
 open Akka.FSharp
 open System.Drawing
 open System.Windows.Forms

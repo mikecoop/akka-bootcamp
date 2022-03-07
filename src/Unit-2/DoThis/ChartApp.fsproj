@@ -14,6 +14,9 @@
     <Compile Include="Actors.fs" />
     <Compile Include="Form.fs" />
     <Compile Include="Program.fs" />
+    <None Include="akka-hocon.config">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
   <ItemGroup>
