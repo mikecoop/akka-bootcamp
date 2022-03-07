@@ -42,11 +42,18 @@ module Actors =
         // Monitor the file for changes
         let observer = new FileObserver (mailbox.Self, Path.GetFullPath (filePath))
         do observer.Start()
+
         // Read the initial contents of the file
         let fileStream = new FileStream (Path.GetFullPath filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)
         let fileStreamReader = new StreamReader (fileStream, Text.Encoding.UTF8)
         let text = fileStreamReader.ReadToEnd ()
         do mailbox.Self <! InitialRead (filePath, text)
+
+        // Ensure cleanup at the end of actor lifecycle
+        mailbox.Defer <| fun () ->
+            (observer :> IDisposable).Dispose()
+            (fileStreamReader :> IDisposable).Dispose()
+            (fileStream :> IDisposable).Dispose()
 
         let rec loop() = actor {
             let! message = mailbox.Receive ()
