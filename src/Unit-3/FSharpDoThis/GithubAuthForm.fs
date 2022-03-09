@@ -32,7 +32,9 @@ module GithubAuthForm =
         let launcherForm = LauncherForm.load ()
         let authenticator = spawn ActorSystem.githubActors "authenticator" (Actors.githubAuthenticationActor lblAuthStatus form launcherForm)
 
-        lblLinkGitHub.LinkClicked.Add (fun _ -> Process.Start "https://help.github.com/articles/creating-an-access-token-for-command-line-use/" |> ignore)
+        lblLinkGitHub.LinkClicked.Add (fun _ ->
+            let startInfo = ProcessStartInfo("chrome", "https://help.github.com/articles/creating-an-access-token-for-command-line-use/", UseShellExecute = true)
+            Process.Start startInfo |> ignore)
         btnAuthenticate.Click.Add (fun _ ->
             if (String.IsNullOrEmpty txtOAuth.Text)
                 then
