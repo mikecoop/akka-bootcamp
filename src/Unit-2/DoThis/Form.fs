@@ -21,9 +21,10 @@ module Form =
     let legend1 = new Legend(Name = "Legend1")
 
     // create the buttons
-    let btnCpu = new Button(Name = "btnCpu", Text = "CPU (ON)", Location = Point(560, 275), Size = Size(110, 40), TabIndex = 1, UseVisualStyleBackColor = true)
-    let btnMemory = new Button(Name = "btnMemory", Text = "MEMORY (OFF)", Location = Point(560, 320), Size = Size(110, 40), TabIndex = 2, UseVisualStyleBackColor = true)
-    let btnDisk = new Button(Name = "btnDisk", Text = "DISK (OFF)", Location = Point(560, 365), Size = Size(110, 40), TabIndex = 3, UseVisualStyleBackColor = true)
+    let btnCpu = new Button(Name = "btnCpu", Text = "CPU (ON)", Location = Point(565, 275), Size = Size(110, 40), TabIndex = 1, UseVisualStyleBackColor = true, Anchor = (AnchorStyles.Right ||| AnchorStyles.Bottom))
+    let btnMemory = new Button(Name = "btnMemory", Text = "MEMORY (OFF)", Location = Point(565, 320), Size = Size(110, 40), TabIndex = 2, UseVisualStyleBackColor = true, Anchor = (AnchorStyles.Right ||| AnchorStyles.Bottom))
+    let btnDisk = new Button(Name = "btnDisk", Text = "DISK (OFF)", Location = Point(565, 365), Size = Size(110, 40), TabIndex = 3, UseVisualStyleBackColor = true, Anchor = (AnchorStyles.Right ||| AnchorStyles.Bottom))
+    let btnPauseResume = new Button(Name = "btnPauseResume", Text = "Pause ||", Location = Point(565, 200), Size = Size(110, 40), TabIndex = 4, UseVisualStyleBackColor = true, Anchor = (AnchorStyles.Right ||| AnchorStyles.Bottom))
 
     sysChart.BeginInit ()
     form.SuspendLayout ()
@@ -31,6 +32,7 @@ module Form =
     sysChart.Legends.Add legend1
 
     // add buttons to the form
+    form.Controls.Add btnPauseResume
     form.Controls.Add btnCpu
     form.Controls.Add btnMemory
     form.Controls.Add btnDisk
@@ -41,7 +43,7 @@ module Form =
     form.ResumeLayout false
 
     let load (myActorSystem:ActorSystem) =
-        let chartActor = spawn myActorSystem "charting" (Actors.chartingActor sysChart)
+        let chartActor = spawn myActorSystem "charting" (Actors.chartingActor sysChart btnPauseResume)
         let coordinatorActor = spawn myActorSystem "counters" (Actors.performanceCounterCoordinatorActor chartActor)
         let toggleActors = Map.ofList [
             (CounterType.Cpu, spawnOpt myActorSystem "cpuCounter" (Actors.buttonToggleActor coordinatorActor btnCpu CounterType.Cpu false) [SpawnOption.Dispatcher("akka.actor.synchronized-dispatcher")])
@@ -52,6 +54,7 @@ module Form =
         // The CPU counter will auto-start at launch
         toggleActors.[CounterType.Cpu] <! Toggle
 
+        btnPauseResume.Click.Add (fun _ -> chartActor <! TogglePause)
         btnCpu.Click.Add (fun _ -> toggleActors.[CounterType.Cpu] <! Toggle)
         btnMemory.Click.Add (fun _ -> toggleActors.[CounterType.Memory] <! Toggle)
         btnDisk.Click.Add (fun _ -> toggleActors.[CounterType.Disk] <! Toggle)

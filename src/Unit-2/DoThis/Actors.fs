@@ -27,11 +27,12 @@ module Messages =
 
     type ButtonMessage = Toggle
 
-    type InitializeChart =
+    type ChartMessage =
         | InitializeChart of initialSeries: Map<string, Series>
         | AddSeries of series: Series
         | RemoveSeries of seriesName: string
         | Metric of series: string * counterValue: float
+        | TogglePause
 
 /// Actors used to intialize chart data
 [<AutoOpen>]
@@ -116,8 +117,10 @@ module Actors =
         }
         loop isToggled
 
-    let chartingActor (chart: Chart) (mailbox: Actor<_>) =
+    let chartingActor (chart: Chart) (pauseButton: System.Windows.Forms.Button) (mailbox: Actor<_>) =
         let maxPoints = 250
+
+        let setPauseButtonText paused = pauseButton.Text <- if not paused then "PAUSED ||" else "RESUME ->"
 
         let setChartBoundaries (mapping: Map<string, Series>, numberOfPoints: int) =
             let allPoints =
@@ -167,5 +170,28 @@ module Actors =
                 while (series.Points.Count > maxPoints) do series.Points.RemoveAt 0
                 setChartBoundaries (mapping, newNoOfPts)
                 return! charting (mapping, newNoOfPts)
+
+            | TogglePause ->
+                setPauseButtonText true
+                return! paused (mapping, numberOfPoints)
+        }
+        and paused (mapping: Map<string, Series>, numberOfPoints: int) = actor {
+            let! message = mailbox.Receive ()
+
+            match message with
+            | TogglePause ->
+                setPauseButtonText false
+                return! charting (mapping, numberOfPoints)
+            | Metric (seriesName, counterValue) when not <| String.IsNullOrEmpty seriesName && mapping |> Map.containsKey seriesName ->
+                let newNoOfPts = numberOfPoints + 1
+                let series = mapping.[seriesName]
+                series.Points.AddXY (newNoOfPts, 0.) |> ignore
+                while (series.Points.Count > maxPoints) do series.Points.RemoveAt 0
+                setChartBoundaries (mapping, newNoOfPts)
+                return! paused (mapping, newNoOfPts)
+            | _ -> ()
+
+            setChartBoundaries (mapping, numberOfPoints)
+            return! paused (mapping, numberOfPoints)
         }
         charting (Map.empty<string, Series>, 0)
